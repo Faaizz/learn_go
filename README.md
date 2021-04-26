@@ -414,11 +414,255 @@ func (p Person) String() string{
 }
 ```
 
-### Errors
+#### The `error` Interface
+The `error`type is a built-in interface defined as:
+```go
+type error interface {
+    Error() string
+}
+```
+`fmt`and other packages often check for the `error` interface when printing values.
+A `fmt.Println(err)` calls the `Error()` method of the underlying value of `err`. E.g.:
+```go
+i, err := strconv.Atoi("42")
+if err != nil {
+    fmt.Printf("couldn't convert number: %v\n", err)
+    return
+}
+fmt.Println("Converted integer:", i)
+```
+
+#### The `io.Reader` Interface
+The `io.Reader` interface represents the read end of a data stream.
+The Go standard library containes many implementations of this interface.
+`Read`populates a given byte slice with data and returns the number of bytes populated, and an error value. When the stream ends, `io.EOF` error is returned.
 
 
+### Goroutines
+A *goroutine* is a lightweight thread managed by the Go runtime
+```go
+go f(x,y,x)
+```
+Runs the function `f` in a new goroutine.
+`f`, `x`,`y`, and `z` are evealuated in the current goorutine, but the execution of `f` happens in the new goroutine. Note **evaluation** differs from **execution**.
 
+
+### Channels
+A channel is a typed conduit through which values can be sent and recieved. 
+By default, sending and receiving is blocked until the other side is ready, providing built-in synchronization.
+Lime Maps and Slices, Channels must be created before use
+```go
+# Create an int channel
+ch_int:= make(chan int)
+
+# Send value over channel
+ch_int <- 200
+
+# Get value from channel
+res:= <- ch_int
+```
+
+#### Buffered Channels
+```go
+buff_len:= 10
+# Make buffered channel
+buff_ch_int:= make(chan int, buff_len)
+```
+Senders block when the buffer is full, while receivers block when the buffer is empty.
+
+#### `range` and `close`
+A channel can be closed by a sender to indicate receiers that no more values would be sent over the channel. 
+This is not a requirement as with files.
+The `range` loop pulls values from a channel until the channel is closed.
+```go
+func producer(chann chan int){
+    for idx:=0;idx<10;idx++{
+        chann <- idx*2
+    }
+
+    close(chann)
+}
+
+func main(){
+    chann:= make(chan int)
+
+    go producer(chann)
+
+    for val := range(chann){
+        fmt.Println(val/2)
+    }
+}
+```
+
+We can also explicitly check if a channel is closed by assigning a second variable in the receiver expression, which is `false` if the channel is closed.
+```go
+val, ok:= <- chann
+# ok is false if channel is closed
+```
+
+#### `select`
+A `select`statements lets a goroutine block until one of its cases can run.
+If multiple cases can run at the same time, it selects one at random.
+```go
+func fibonacci(c, quit chan int) {
+	x, y := 0, 1
+	for {
+		select {
+		case c <- x:
+			x, y = y, x+y
+		case <-quit:
+			fmt.Println("quit")
+			return
+		}
+	}
+}
+
+func main() {
+	c := make(chan int)
+	quit := make(chan int)
+	go func() {
+		for i := 0; i < 10; i++ {
+			fmt.Println(<-c)
+		}
+		quit <- 0
+	}()
+	fibonacci(c, quit)
+}
+```
+A `default`case can also specified, this is run if no other case is ready.
+
+#### Equivalent Binary Trees Example
+```go
+package main
+
+import (
+	"golang.org/x/tour/tree"
+	"fmt"
+)
+
+// Compare Slices
+func testEq(a, b []int) bool {
+
+    // If one is nil, the other must also be nil.
+    if (a == nil) != (b == nil) { 
+        return false; 
+    }
+
+    if len(a) != len(b) {
+        return false
+    }
+
+    for i := range a {
+        if a[i] != b[i] {
+            return false
+        }
+    }
+
+    return true
+}
+
+
+// Walk walks the tree t sending all values
+// from the tree to the channel ch.
+func Walk(t *tree.Tree, ch chan int){
+	// Check left branch
+	if t.Left != nil{
+		Walk(t.Left, ch)
+	}
+	
+	// Send value to channel
+	ch <- t.Value
+	
+	// Check right branch
+	if t.Right != nil{
+		Walk(t.Right, ch)
+	}
+	
+	// End
+	if t.Value==10{
+		close(ch)
+	}
+}
+
+// Same determines whether the trees
+// t1 and t2 contain the same values.
+func Same(t1, t2 *tree.Tree) bool{
+
+	chan1:= make(chan int)
+	go Walk(t1, chan1)
+	//seq1:= make([]int)
+	seq1:= []int{}
+	for val:=range(chan1){
+		seq1= append(seq1, val)
+	}
+	
+	chan2:= make(chan int)
+	go Walk(t2, chan2)
+	//seq2:= make([]int)
+	seq2:= []int{}
+	for val:=range(chan2){
+		seq2= append(seq2, val)
+	}
+	
+	// Compare
+	return testEq(seq1, seq2)
+}
+
+func main() {
+	myTree:= tree.New(1)
+	treeChan:= make(chan int)
+	go Walk(myTree, treeChan)
+	seq:= []int{}
+	for val:= range(treeChan){
+		seq= append(seq,val)
+	}
+	fmt.Println(seq)
+	
+	compared:= Same(tree.New(1), tree.New(1))
+	fmt.Println(compared)
+}
+```
+
+### `sync.Mutex`
+Mutual Exclusion is the concept of preventing conflicts by ensuring that only one routine/function/method can mutate a variable at a point in time.
+*Mutex* is the conventional name for the data structure that provides this concept.
+Go's standard library provides mutual exlusion with `sync.Mutex`.
+```go
+// SafeCounter is safe to use concurrently.
+type SafeCounter struct {
+	mu sync.Mutex
+	v  map[string]int
+}
+
+// Inc increments the counter for the given key.
+func (c *SafeCounter) Inc(key string) {
+	c.mu.Lock()
+	// Lock so only one goroutine at a time can access the map c.v.
+	c.v[key]++
+	c.mu.Unlock()
+}
+
+// Value returns the current value of the counter for the given key.
+func (c *SafeCounter) Value(key string) int {
+	c.mu.Lock()
+	// Lock so only one goroutine at a time can access the map c.v.
+	defer c.mu.Unlock()
+	return c.v[key]
+}
+
+func main() {
+	c := SafeCounter{v: make(map[string]int)}
+	for i := 0; i < 1000; i++ {
+		go c.Inc("somekey")
+	}
+
+	time.Sleep(time.Second)
+	fmt.Println(c.Value("somekey"))
+}
+```
+We can use `defer`to ensure that the mutex is unlocked as shown above in `Value` function.
 
 
 ## References
 - [A Tour of Go](https://tour.golang.org)
+- [Checking equality of two slices- Stack Overflow](https://stackoverflow.com/questions/15311969/checking-the-equality-of-two-slices)
