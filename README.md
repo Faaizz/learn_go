@@ -1,5 +1,47 @@
 # Learn Go
 
+## Content
+- [Learn Go](#learn-go)
+  - [Content](#content)
+  - [Useful Commands](#useful-commands)
+  - [A Tour of Go](#a-tour-of-go)
+    - [Basic Types](#basic-types)
+      - [Casting](#casting)
+      - [Constants](#constants)
+    - [Looping](#looping)
+    - [Conditionals](#conditionals)
+      - [`if`](#if)
+      - [`switch`](#switch)
+    - [`defer`](#defer)
+    - [`struct`](#struct)
+    - [Arrays](#arrays)
+    - [Slices](#slices)
+      - [Creating a slice with `make`](#creating-a-slice-with-make)
+      - [Appending to slices](#appending-to-slices)
+    - [Range](#range)
+    - [Maps](#maps)
+      - [Mutating Maps](#mutating-maps)
+    - [Functions](#functions)
+      - [Closures](#closures)
+      - [Methods](#methods)
+    - [Interfaces](#interfaces)
+      - [Interface values with nil underlying values](#interface-values-with-nil-underlying-values)
+      - [Empty Interfaces and Type Assertions](#empty-interfaces-and-type-assertions)
+      - [The `Stringer` Interface](#the-stringer-interface)
+      - [The `error` Interface](#the-error-interface)
+      - [The `io.Reader` Interface](#the-ioreader-interface)
+    - [Generics](#generics)
+      - [Generic Functions](#generic-functions)
+      - [Generic Types](#generic-types)
+    - [Goroutines](#goroutines)
+    - [Channels](#channels)
+      - [Buffered Channels](#buffered-channels)
+      - [`range` and `close`](#range-and-close)
+      - [`select`](#select)
+      - [Equivalent Binary Trees Example](#equivalent-binary-trees-example)
+    - [`sync.Mutex`](#syncmutex)
+  - [References](#references)
+
 ## Useful Commands
 ```shell
 # Organize dependencies
@@ -34,10 +76,15 @@ Print a variable's type using:
 ```go
 fmt.Println("varName has type: %T", varName)
 ```
+#### Casting
+Go requires explicit casting **always**.
 #### Constants
-Are declared like variables but cannot use the simple assignment syntax.
+Are declared like variables but cannot use the simple assignment syntax (`:=`).
 ```go
-const Pi= 3.14
+// Typed constant
+const Pi int = 3.14
+// Untyped numeric constant: can functions as an `int` or `float` depending on the context where it's used
+const Rho = 0.002
 ```
 
 ### Looping
@@ -59,12 +106,20 @@ But again, unlike other popular languages, the semicolons can be dropped such th
 ```go
 cond:= true
 idx:= 5
-for cond{
+for cond {
     fmt.Println(cond)
     if idx<10{
         cond= false
     }
     idx++
+}
+```
+To get a forever loop, you can omit all three statements all-together
+```go
+for {
+    if status := upload.Status(); status == true {
+        break
+    }
 }
 ```
 
@@ -77,8 +132,7 @@ if cond:=true; cond{
     fmt.Println("Always true!")
 }
 ```
-Variables declared in an `
-if`'s short statement are only available in the `if` block and in blocks of associated `else`s.
+Variables declared in an `if`'s short statement are only available in the `if` block and in blocks of associated `else`s.
 
 #### `switch`
 In go, `switch`statements also allow the short statement as in `if` and `for`.
@@ -122,7 +176,7 @@ A `struct`is a collection of fields.
 ```go
 // Defining a struct
 type Quad struct{
-    x,y int
+    x, y int
 }
 
 var(
@@ -178,7 +232,7 @@ numArr[0:]
 numArr[:10]
 numArr[:]
 ```
-A slice has a lenght and a capacity. Its length is the number of elements it contains, while its capacity is the numbe rof elements of the underlying array counting from the first element referenced by the slice.
+A slice has a lenght and a capacity. Its length is the number of elements it contains, while its capacity is the number of elements of the underlying array counting from the first element referenced by the slice.
 The length and capacity of a slice can be changed by re-slicing:
 ```go
 func main(){
@@ -219,7 +273,7 @@ s= append(s, 1,2,4)
 If the underlying array is too small, a new array is allocated and referenced by the slice.
 
 ### Range
-This form of `for`loop iterates over a slice or a map:
+This form of `for` loop iterates over a slice or a map:
 ```go
 aSlice:= []int{1,2,3,4,5,6}
 
@@ -272,7 +326,34 @@ if !ok{
 }
 ```
 
-### Methods
+### Functions
+Go has 1st calss functions, i.e.., functions are values also.
+They can be passed around as function arguments, returned from a function, and can be assigned to variables.
+```go
+func execFunc(x, y float64, fn func(float64, float64) error) bool {
+    err := fn(x, y)
+    if err == nil {
+        return true
+    }
+    return false
+}
+
+func main() {
+    myFunc := func (x, y float64) error {
+        if x>y {
+            return errors.New("big error")
+        }
+        return nil
+    }
+
+    fmt.Printf("Exec result: %v", execFunc(3, 4, myFunc))
+}
+```
+#### Closures
+Closures are functions that reference variables outside the function body.
+Since Go only "passes by value", a closure "encloses" a copy of the variables it references and keeps a local copy which is only visible withing the scope if the closure.
+
+#### Methods
 Go does not have classes, but methods can be defined on types.
 A method is a function with a special receiver parameter which appers in the method's parameter list between the `func` keyword and the method's name, 
 the variable on which the method is called is passed as the receiver argument.
@@ -354,15 +435,50 @@ func main() {
     aTri:= RightTiangle{3,4}
     aShape= aTri // Works because RightTriangle (the value) implements the required functions
     fmt.Println(aShape.perimeter())
+
+    // To get the concrete type behind an interface, use the %T print format option
+    fmt.Printf("Concrete type: %T", aShape)
+}
+```
+#### Interface values with nil underlying values
+In Go, it is perfectly okay for an interface to have a `nil` underlying concrete value.
+However, note that the interface itself is **not** `nil`.
+And methods can be constructed such that they can gracefully handle being invoked on a `nil` receiver.
+```go
+
+type Comer interface {
+    Come() bool
+}
+
+type Overcomer struct {
+    CanCome bool
+}
+
+func (o *Overcomer) Come() bool {
+    if o == nil {
+        return false
+    }
+    return o.CanCome
+}
+
+func main() {
+    var c Comer
+    var o *Overcomer
+    c = o
+    fmt.Printf("nil Overcomer: %v is non-nil Comer: %v\n", o, c)
+    fmt.Println(c.Come())
 }
 ```
 #### Empty Interfaces and Type Assertions
-Returns a tuple of the interface value's underlying value and a boolean indicating wether or not it is of the specified type:
+An empty interface is an interface that specifies no methods.
+An empty interface can hold concrete values of any type.
+A type assertion returns a tuple of the interface value's underlying value and a boolean indicating whether or not it is of the specified type:
 ```go
 
 func main(){
     // Empty interface
-    var i interface{}= "hello"
+    var i interface{} 
+    i = "hello"
     // Type assertion
     val, ok:= i.(string)
     // ok is true
@@ -437,6 +553,28 @@ The `io.Reader` interface represents the read end of a data stream.
 The Go standard library containes many implementations of this interface.
 `Read`populates a given byte slice with data and returns the number of bytes populated, and an error value. When the stream ends, `io.EOF` error is returned.
 
+### Generics
+#### Generic Functions
+Type parameters of a function appear in square brackets, before the function's parameters.
+E.g.:
+```go
+func Index[T comparable](s []T, t T) int {
+    ...
+}
+```
+`comparable` used here is a built-in constraint that type `T` (in this example) must fulfil.
+`comparable` makes it possible to use `==` and `!=` on a type.
+Other constraints may be used in its place as required.
+
+#### Generic Types
+Go also supports generic types.
+Type parameters could be added to a type declaration as shown below:
+```go
+type List[T any] struct {
+    next *List[T]
+    val T
+}
+```
 
 ### Goroutines
 A *goroutine* is a lightweight thread managed by the Go runtime
@@ -497,7 +635,7 @@ func main(){
 We can also explicitly check if a channel is closed by assigning a second variable in the receiver expression, which is `false` if the channel is closed.
 ```go
 val, ok:= <- chann
-# ok is false if channel is closed
+// ok is false if channel is closed
 ```
 
 #### `select`
@@ -529,7 +667,7 @@ func main() {
 	fibonacci(c, quit)
 }
 ```
-A `default`case can also specified, this is run if no other case is ready.
+A `default` case can also specified, this is run if no other case is ready.
 
 #### Equivalent Binary Trees Example
 ```go
